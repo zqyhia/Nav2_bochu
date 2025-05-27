@@ -32,6 +32,7 @@ def generate_launch_description():
     use_respawn = LaunchConfiguration('use_respawn') # 节点崩溃后是否重启
     log_level = LaunchConfiguration('log_level')
 
+    localization_type = LaunchConfiguration('localization_type')
     pbstream_file = LaunchConfiguration('pbstream_file')
 
     # TF 重映射
@@ -113,6 +114,11 @@ def generate_launch_description():
         'log_level', default_value='info',
         description='log level')
     
+    declare_localization_type = DeclareLaunchArgument(
+        'localization_type',
+        default_value='carto',
+        description='选择定位方式: amcl 或 carto')
+
     declare_pbstream_file = DeclareLaunchArgument(
         'pbstream_file', default_value='/home/zqyhia/mybag/fishbot_sim_time_bag1.pbstream',
         description='pbstream_file')
@@ -146,17 +152,14 @@ def generate_launch_description():
                               'use_respawn': use_respawn,
                               'params_file': params_file}.items()),
 
-        # 条件包含定位 launch 文件（当 slam 参数为 false 时）
-        # IncludeLaunchDescription(
-        #     PythonLaunchDescriptionSource(os.path.join(cartographer_dir,'launch',
-        #                                                'fishbot_2d_localization_pbstream_nav2.launch.py')),
-        #     condition=IfCondition(PythonExpression(['not ', slam])),
-        #     launch_arguments={'load_state_filename': pbstream_file}.items()),
-
+        # 条件包含carto定位 launch 文件（当 slam 参数为 false 时）
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(os.path.join(launch_dir,
                                                        'carto_localization.launch.py')),
-            condition=IfCondition(PythonExpression(['not ', slam])),
+            condition=IfCondition(PythonExpression([
+                'not ', slam,
+                ' and "', localization_type, '" == "carto"'
+                ])),
             launch_arguments={'namespace': namespace,
                               'map': map_yaml_file,
                               'use_sim_time': use_sim_time,
@@ -167,6 +170,23 @@ def generate_launch_description():
                               'container_name': 'nav2_container',
                               'pbstream_file': pbstream_file}.items()),
 
+        # 条件包含amcl定位 launch 文件（当 slam 参数为 false 时）
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(os.path.join(launch_dir,
+                                                       'localization_launch.py')),
+            condition=IfCondition(PythonExpression([
+                'not ', slam,
+                ' and "', localization_type, '" == "amcl"'
+                ])),
+            launch_arguments={'namespace': namespace,
+                              'map': map_yaml_file,
+                              'use_sim_time': use_sim_time,
+                              'autostart': autostart,
+                              'params_file': params_file,
+                              'use_composition': use_composition,
+                              'use_respawn': use_respawn,
+                              'container_name': 'nav2_container'}.items()),
+        
         # 包含导航 launch 文件（总是执行）
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(os.path.join(launch_dir, 'navigation_launch.py')),
@@ -198,6 +218,7 @@ def generate_launch_description():
     ld.add_action(declare_use_respawn_cmd)
     ld.add_action(declare_log_level_cmd)
 
+    ld.add_action(declare_localization_type)
     ld.add_action(declare_pbstream_file)
 
     # Add the actions to launch all of the navigation nodes
